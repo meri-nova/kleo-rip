@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Extension Icons</title>
+    <style>
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        .icon-container { display: inline-block; margin: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>Extension Icon Generator</h1>
+    <p>This will generate simple icons for the extension. Right-click each canvas and "Save image as..."</p>
+    
+    <div class="icon-container">
+        <canvas id="icon16" width="16" height="16"></canvas>
+        <div>icon16.png</div>
+    </div>
+    
+    <div class="icon-container">
+        <canvas id="icon32" width="32" height="32"></canvas>
+        <div>icon32.png</div>
+    </div>
+    
+    <div class="icon-container">
+        <canvas id="icon48" width="48" height="48"></canvas>
+        <div>icon48.png</div>
+    </div>
+    
+    <div class="icon-container">
+        <canvas id="icon128" width="128" height="128"></canvas>
+        <div>icon128.png</div>
+    </div>
+
+    <script>
+        function createIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Blue background
+            ctx.fillStyle = '#0073b1';
+            ctx.fillRect(0, 0, size, size);
+            
+            // White chart icon
+            ctx.fillStyle = '#ffffff';
+            
+            // Simple bar chart
+            const barWidth = Math.max(1, size / 8);
+            const spacing = Math.max(1, size / 16);
+            const startX = Math.max(1, size / 4);
+            
+            // Three bars of different heights
+            ctx.fillRect(startX, size * 0.7, barWidth, size * 0.25);
+            ctx.fillRect(startX + barWidth + spacing, size * 0.5, barWidth, size * 0.45);
+            ctx.fillRect(startX + (barWidth + spacing) * 2, size * 0.3, barWidth, size * 0.65);
+        }
+        
+        createIcon('icon16', 16);
+        createIcon('icon32', 32);
+        createIcon('icon48', 48);
+        createIcon('icon128', 128);
+    </script>
+</body>
+</html>

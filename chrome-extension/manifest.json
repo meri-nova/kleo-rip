@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Post Scraper",
+  "version": "1.0.0",
+  "description": "Scrape and analyze LinkedIn posts with engagement metrics",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "https://linkedin.com/*",
+    "https://*.linkedin.com/*",
+    "http://localhost:3000/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": [
+        "https://linkedin.com/in/*",
+        "https://*.linkedin.com/in/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LinkedIn Post Scraper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
