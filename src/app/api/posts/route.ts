@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
       query = query.gte('post_date', cutoffDate)
     }
 
-    // Apply sorting
-    const ascending = false // Most engagement first
+    // Apply sorting - default to likes descending (most engagement first)
+    const ascending = false
     switch (sortBy) {
       case 'comments':
         query = query.order('comments', { ascending })
@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
       case 'date':
         query = query.order('post_date', { ascending: false }) // Most recent first
         break
-      default: // likes
+      case 'likes':
+      default: // Default to likes
         query = query.order('likes', { ascending })
         break
     }

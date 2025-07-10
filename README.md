@@ -48,7 +48,6 @@ Create `.env.local` file:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_key
-FIRECRAWL_API_KEY=your_firecrawl_key_optional
 ```
 
 ### 3. Database Setup
@@ -172,7 +171,7 @@ npm run build
 
 ## 📋 Roadmap
 
-- [ ] Real Firecrawl integration
+- [ ] Enhanced DOM extraction accuracy
 - [ ] Advanced analytics and insights
 - [ ] Export functionality (CSV, PDF)
 - [ ] Multi-profile comparison

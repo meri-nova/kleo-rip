@@ -4,7 +4,6 @@
 - Node.js installed on your machine
 - Chrome browser
 - Supabase account (already set up ✅)
-- Firecrawl API key (optional for now)
 
 ## Step 1: Install Dependencies
 
@@ -74,9 +73,9 @@ Your app should be running at: http://localhost:3000
 - Dashboard UI with sorting/filtering
 - Caching system (24-hour refresh)
 
-### 🔄 Mock Data (For Now)
-- Using simulated posts instead of real scraping
-- Replace with Firecrawl integration later
+### 🔄 DOM Extraction System
+- Uses Chrome extension to extract posts directly from LinkedIn DOM
+- Real engagement metrics (likes, comments, reposts)
 
 ### 📋 Database Tables Created
 - `profiles` - LinkedIn profile info
@@ -102,11 +101,10 @@ Your app should be running at: http://localhost:3000
 
 ## Next Steps
 
-1. **Get Firecrawl API key** and add to .env.local
-2. **Replace mock scraping** with real Firecrawl integration
-3. **Test with real LinkedIn profiles**
-4. **Add more filtering options** (date ranges, post types)
-5. **Deploy to production** (Vercel + Chrome Web Store)
+1. **Test DOM extraction** on various LinkedIn profiles
+2. **Improve engagement metrics accuracy** with better selectors
+3. **Add more filtering options** (date ranges, post types)
+4. **Deploy to production** (Vercel + Chrome Web Store)
 
 ## File Structure Overview
 

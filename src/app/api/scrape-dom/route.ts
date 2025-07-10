@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
+
+export async function POST(request: NextRequest) {
+  try {
+    const { profileInfo, posts } = await request.json()
+
+    if (!profileInfo || !posts || !Array.isArray(posts)) {
+      return NextResponse.json({ error: 'Profile info and posts array are required' }, { status: 400 })
+    }
+
+    console.log('Processing DOM-extracted posts:', posts.length)
+
+    // Validate LinkedIn URL format
+    if (!profileInfo.profileUrl || !profileInfo.profileUrl.includes('linkedin.com/in/')) {
+      return NextResponse.json({ error: 'Invalid LinkedIn profile URL' }, { status: 400 })
+    }
+
+    // Extract username from URL
+    const username = profileInfo.profileUrl.split('/in/')[1]?.split('/')[0]
+
+    // Check if profile already exists, create if not
+    let { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('linkedin_url', profileInfo.profileUrl)
+      .single()
+
+    let profileId: string
+
+    if (existingProfile) {
+      profileId = existingProfile.id
+    } else {
+      // Create new profile
+      const { data: newProfile, error } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          linkedin_url: profileInfo.profileUrl,
+          username: username,
+          full_name: profileInfo.fullName || null,
+          profile_image_url: profileInfo.profileImageUrl || null
+        })
+        .select()
+        .single()
+
+      if (error || !newProfile) {
+        console.error('Profile creation error:', error)
+        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 })
+      }
+
+      profileId = newProfile.id
+    }
+
+    // Clear existing posts for this profile (to avoid mixing old data with new data)
+    await supabaseAdmin
+      .from('posts')
+      .delete()
+      .eq('profile_id', profileId)
+
+    // Process and validate posts
+    const validPosts = posts
+      .filter(post => post.content && post.content.length > 50)
+      .map((post, index) => ({
+        profile_id: profileId,
+        linkedin_post_url: post.linkedinPostUrl || `${profileInfo.profileUrl}/activity/post-${Date.now()}-${index}`,
+        content: post.content,
+        likes: parseInt(post.likes) || 0,
+        comments: parseInt(post.comments) || 0,
+        reposts: parseInt(post.reposts) || 0,
+        post_date: post.postDate || new Date().toISOString(),
+        scraped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }))
+
+    if (validPosts.length === 0) {
+      return NextResponse.json({ error: 'No valid posts found in extracted data' }, { status: 400 })
+    }
+
+    // Sort posts by likes descending before saving
+    validPosts.sort((a, b) => b.likes - a.likes)
+
+    // Use upsert to handle potential duplicates
+    const { error: postsError } = await supabaseAdmin
+      .from('posts')
+      .upsert(validPosts, { 
+        onConflict: 'linkedin_post_url',
+        ignoreDuplicates: false 
+      })
+
+    if (postsError) {
+      console.error('Database upsert error:', postsError)
+      console.error('Valid posts data:', JSON.stringify(validPosts.slice(0, 2), null, 2))
+      return NextResponse.json({ 
+        error: 'Failed to save posts to database', 
+        details: postsError.message,
+        code: postsError.code 
+      }, { status: 500 })
+    }
+
+    // Update profile with latest scrape info
+    await supabaseAdmin
+      .from('profiles')
+      .update({
+        last_scraped_at: new Date().toISOString(),
+        post_count: validPosts.length,
+        full_name: profileInfo.fullName || existingProfile?.full_name,
+        profile_image_url: profileInfo.profileImageUrl || existingProfile?.profile_image_url,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', profileId)
+
+    console.log(`Successfully saved ${validPosts.length} DOM-extracted posts`)
+
+    return NextResponse.json({
+      success: true,
+      profileId: profileId,
+      postsCount: validPosts.length,
+      message: `Successfully scraped ${validPosts.length} posts from LinkedIn DOM`
+    })
+
+  } catch (error) {
+    console.error('DOM scrape API error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

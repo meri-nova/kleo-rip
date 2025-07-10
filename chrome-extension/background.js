@@ -3,21 +3,32 @@
 const DASHBOARD_URL = 'http://localhost:3000/dashboard';
 const API_BASE_URL = 'http://localhost:3000/api';
 
-// Handle messages from content script
+// Handle messages from popup and content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Background script received message:', message);
+  
   if (message.action === 'scrapeProfile') {
-    handleScrapeProfile(message.profileInfo)
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
+    handleScrapeProfile(message.profileInfo, message.posts)
+      .then(result => {
+        console.log('Scrape successful:', result);
+        sendResponse({ success: true, data: result });
+      })
+      .catch(error => {
+        console.error('Scrape failed:', error);
+        sendResponse({ success: false, error: error.message });
+      });
     
     return true; // Keep message channel open for async response
   }
+  
+  return true; // Always return true to keep message channel open
 });
 
-// Handle profile scraping
-async function handleScrapeProfile(profileInfo) {
+// Handle profile scraping with DOM-extracted posts
+async function handleScrapeProfile(profileInfo, posts = null) {
   try {
     console.log('Starting scrape for profile:', profileInfo);
+    console.log('Posts extracted from DOM:', posts?.length || 0);
 
     // Store profile info in extension storage
     await chrome.storage.local.set({
@@ -27,64 +38,52 @@ async function handleScrapeProfile(profileInfo) {
       }
     });
 
-    // Start scraping process
-    const scrapeResponse = await fetch(`${API_BASE_URL}/scrape`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        linkedinUrl: profileInfo.profileUrl
-      })
-    });
+    // If we have DOM-extracted posts, send them directly to the API
+    if (posts && posts.length > 0) {
+      const response = await fetch(`${API_BASE_URL}/scrape-dom`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profileInfo: profileInfo,
+          posts: posts
+        })
+      });
 
-    const scrapeData = await scrapeResponse.json();
-    
-    if (!scrapeResponse.ok) {
-      throw new Error(scrapeData.error || 'Failed to start scraping');
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save extracted posts');
+      }
+
+      // Build dashboard URL with parameters
+      const dashboardParams = new URLSearchParams({
+        profile: profileInfo.profileUrl,
+        fresh: 'true'
+      });
+
+      const dashboardUrl = `${DASHBOARD_URL}?${dashboardParams.toString()}`;
+
+      // Open dashboard in new tab
+      const tab = await chrome.tabs.create({
+        url: dashboardUrl,
+        active: true
+      });
+
+      return {
+        tabId: tab.id,
+        dashboardUrl: dashboardUrl,
+        postsCount: posts.length,
+        method: 'dom-extraction'
+      };
+    } else {
+      // No DOM posts available
+      throw new Error('No posts extracted from DOM. Please visit the LinkedIn activity page and try again.');
     }
-
-    // Build dashboard URL with parameters
-    const dashboardParams = new URLSearchParams({
-      profile: profileInfo.profileUrl
-    });
-
-    if (scrapeData.jobId) {
-      dashboardParams.append('job', scrapeData.jobId);
-    }
-
-    const dashboardUrl = `${DASHBOARD_URL}?${dashboardParams.toString()}`;
-
-    // Open dashboard in new tab
-    const tab = await chrome.tabs.create({
-      url: dashboardUrl,
-      active: true
-    });
-
-    // Store the tab info for future reference
-    await chrome.storage.local.set({
-      lastDashboardTab: tab.id,
-      lastScrapeJob: scrapeData.jobId || null
-    });
-
-    return {
-      jobId: scrapeData.jobId,
-      tabId: tab.id,
-      dashboardUrl: dashboardUrl,
-      cached: scrapeData.cached || false
-    };
 
   } catch (error) {
     console.error('Scrape profile error:', error);
-    
-    // Show error notification
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon48.png',
-      title: 'LinkedIn Scraper Error',
-      message: error.message || 'Failed to scrape profile'
-    });
-
     throw error;
   }
 }
@@ -111,36 +110,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-// Clean up old stored data periodically
+// Initialize extension
 chrome.runtime.onInstalled.addListener(() => {
-  // Set up periodic cleanup
-  chrome.alarms.create('cleanup', { periodInMinutes: 60 });
+  console.log('LinkedIn Post Scraper extension installed');
 });
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'cleanup') {
-    cleanupOldData();
-  }
-});
-
-async function cleanupOldData() {
-  try {
-    const storage = await chrome.storage.local.get();
-    const now = Date.now();
-    const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
-
-    const keysToRemove = [];
-    for (const [key, value] of Object.entries(storage)) {
-      if (key.startsWith('profile_') && value.lastAccessed < oneWeekAgo) {
-        keysToRemove.push(key);
-      }
-    }
-
-    if (keysToRemove.length > 0) {
-      await chrome.storage.local.remove(keysToRemove);
-      console.log(`Cleaned up ${keysToRemove.length} old profile entries`);
-    }
-  } catch (error) {
-    console.error('Cleanup error:', error);
-  }
-}

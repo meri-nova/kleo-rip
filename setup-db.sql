@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS posts (
   likes INTEGER DEFAULT 0,
   comments INTEGER DEFAULT 0,
   reposts INTEGER DEFAULT 0,
-  views INTEGER DEFAULT 0,
   post_date TIMESTAMP WITH TIME ZONE,
   scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -37,6 +36,7 @@ CREATE TABLE IF NOT EXISTS scrape_jobs (
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE
 );
+
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_profiles_linkedin_url ON profiles(linkedin_url);

@@ -31,7 +31,6 @@ export interface Post {
   likes: number
   comments: number
   reposts: number
-  views: number
   post_date: string | null
   scraped_at: string
   updated_at: string
@@ -47,3 +46,4 @@ export interface ScrapeJob {
   started_at: string
   completed_at: string | null
 }
+

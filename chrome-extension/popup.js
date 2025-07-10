@@ -48,51 +48,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       scrapeBtn.textContent = 'Starting...';
       showStatus('Starting scrape process...', 'success');
 
-      // Inject content script and trigger scraping
-      await chrome.scripting.executeScript({
-        target: { tabId: currentTab.id },
-        func: triggerScrapeFromPopup
-      });
+      // Get profile info directly from the current tab URL
+      const profileInfo = {
+        profileUrl: currentTab.url.match(/https:\/\/[^\/]+\/in\/[^\/\?]+/)?.[0] || currentTab.url,
+        fullName: '',
+        username: currentTab.url.split('/in/')[1]?.split('/')[0] || '',
+        profileImageUrl: ''
+      };
 
-      // Listen for response from content script
-      const response = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
+      // Send directly to background script for processing
+      chrome.runtime.sendMessage({
+        action: 'scrapeProfile',
+        profileInfo: profileInfo
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Background script error:', chrome.runtime.lastError);
+          showStatus(`Error: ${chrome.runtime.lastError.message}`, 'error');
+          scrapeBtn.disabled = false;
+          scrapeBtn.textContent = 'Scrape This Profile';
+          return;
+        }
         
-        chrome.tabs.sendMessage(currentTab.id, { action: 'getProfileInfo' }, (response) => {
-          clearTimeout(timeout);
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(response);
-          }
-        });
+        if (response && response.success) {
+          showStatus('Dashboard opened! Scraping in progress...', 'success');
+          setTimeout(() => {
+            window.close();
+          }, 2000);
+        } else {
+          showStatus(`Error: ${response?.error || 'Unknown error'}`, 'error');
+          scrapeBtn.disabled = false;
+          scrapeBtn.textContent = 'Scrape This Profile';
+        }
       });
-
-      if (response && response.profileInfo) {
-        // Send to background script for processing
-        const result = await new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage({
-            action: 'scrapeProfile',
-            profileInfo: response.profileInfo
-          }, (response) => {
-            if (response.success) {
-              resolve(response.data);
-            } else {
-              reject(new Error(response.error));
-            }
-          });
-        });
-
-        showStatus('Dashboard opened! Scraping in progress...', 'success');
-        
-        // Close popup after a delay
-        setTimeout(() => {
-          window.close();
-        }, 2000);
-
-      } else {
-        throw new Error('Could not extract profile information');
-      }
 
     } catch (error) {
       console.error('Scrape error:', error);

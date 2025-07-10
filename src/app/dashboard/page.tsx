@@ -1,13 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Post, Profile, ScrapeJob } from '@/lib/supabase'
+import { Post, Profile } from '@/lib/supabase'
+import { useSearchParams } from 'next/navigation'
 
-interface DashboardProps {
-  searchParams: { [key: string]: string | string[] | undefined }
-}
-
-export default function Dashboard({ searchParams }: DashboardProps) {
+export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -15,9 +12,16 @@ export default function Dashboard({ searchParams }: DashboardProps) {
   const [sortBy, setSortBy] = useState('likes')
   const [timeframe, setTimeframe] = useState('all')
   const [jobId, setJobId] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set())
 
-  const profileUrl = searchParams.profile as string
-  const initialJobId = searchParams.job as string
+  const searchParams = useSearchParams()
+  const profileUrl = mounted ? searchParams.get('profile') : null
+  const initialJobId = mounted ? searchParams.get('job') : null
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (profileUrl) {
@@ -30,6 +34,8 @@ export default function Dashboard({ searchParams }: DashboardProps) {
   }, [profileUrl, initialJobId, sortBy, timeframe])
 
   const loadPosts = async () => {
+    if (!profileUrl) return
+    
     try {
       setLoading(true)
       const params = new URLSearchParams({
@@ -119,6 +125,38 @@ export default function Dashboard({ searchParams }: DashboardProps) {
     return num.toLocaleString()
   }
 
+  const truncateContent = (content: string, maxLength: number = 200) => {
+    if (content.length <= maxLength) return content
+    return content.substring(0, maxLength) + '...'
+  }
+
+  const togglePostExpansion = (postId: string) => {
+    setExpandedPosts(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(postId)) {
+        newSet.delete(postId)
+      } else {
+        newSet.add(postId)
+      }
+      return newSet
+    })
+  }
+
+
+  // Show loading while mounting to prevent hydration errors
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-gray-900 mb-8">LinkedIn Post Scraper</h1>
+          <div className="bg-white rounded-lg shadow p-6">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!profileUrl) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
@@ -206,35 +244,117 @@ export default function Dashboard({ searchParams }: DashboardProps) {
             <p className="text-gray-600">No posts found. Try scraping this profile first.</p>
           </div>
         ) : (
-          <div className="grid gap-6">
-            {posts.map((post) => (
-              <div key={post.id} className="bg-white rounded-lg shadow p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <p className="text-gray-800 mb-3">{post.content}</p>
-                    <div className="flex gap-6 text-sm text-gray-500">
-                      <span>👍 {formatNumber(post.likes)} likes</span>
-                      <span>💬 {formatNumber(post.comments)} comments</span>
-                      <span>🔄 {formatNumber(post.reposts)} reposts</span>
-                      <span>👁️ {formatNumber(post.views)} views</span>
+          <div className="grid gap-4">
+            {posts.map((post) => {
+              const isExpanded = expandedPosts.has(post.id)
+              const shouldTruncate = post.content && post.content.length > 200
+              
+              return (
+                <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  {/* LinkedIn-style header */}
+                  <div className="p-4 pb-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-blue-600 font-semibold text-sm">
+                            {profile?.full_name?.charAt(0) || profile?.username?.charAt(0) || 'U'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {profile?.full_name || profile?.username || 'LinkedIn User'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {post.post_date ? formatDate(post.post_date) : 'Unknown date'} • 
+                            <span className="ml-1">🌐 Public</span>
+                          </p>
+                        </div>
+                      </div>
+                      <button className="text-gray-400 hover:text-gray-600">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    {/* Post content */}
+                    <div className="text-gray-900 leading-relaxed">
+                      {post.content && (
+                        <>
+                          <p className="whitespace-pre-wrap text-sm">
+                            {isExpanded || !shouldTruncate 
+                              ? post.content 
+                              : truncateContent(post.content)}
+                          </p>
+                          {shouldTruncate && (
+                            <button
+                              onClick={() => togglePostExpansion(post.id)}
+                              className="text-gray-500 hover:text-blue-600 text-sm font-medium mt-2 flex items-center"
+                            >
+                              {isExpanded ? '...see less' : '...see more'}
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">
-                      {post.post_date ? formatDate(post.post_date) : 'Unknown date'}
-                    </p>
-                    <a 
-                      href={post.linkedin_post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      View on LinkedIn
-                    </a>
+
+                  {/* LinkedIn-style engagement section */}
+                  <div className="border-t border-gray-100">
+                    {/* Engagement counts */}
+                    <div className="px-4 py-2 flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center space-x-4">
+                        {post.likes > 0 && (
+                          <span className="flex items-center">
+                            <span className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center mr-1">
+                              👍
+                            </span>
+                            {formatNumber(post.likes)}
+                          </span>
+                        )}
+                        {(post.comments > 0 || post.reposts > 0) && (
+                          <span>
+                            {post.comments > 0 && `${formatNumber(post.comments)} comments`}
+                            {post.comments > 0 && post.reposts > 0 && ' • '}
+                            {post.reposts > 0 && `${formatNumber(post.reposts)} reposts`}
+                          </span>
+                        )}
+                      </div>
+                      <a 
+                        href={post.linkedin_post_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 text-xs"
+                      >
+                        View on LinkedIn →
+                      </a>
+                    </div>
+
+                    {/* LinkedIn-style action buttons */}
+                    <div className="border-t border-gray-100 px-4 py-2">
+                      <div className="flex items-center justify-around">
+                        <button className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-gray-50 text-gray-600 text-sm">
+                          <span>👍</span>
+                          <span>Like</span>
+                        </button>
+                        <button className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-gray-50 text-gray-600 text-sm">
+                          <span>💬</span>
+                          <span>Comment</span>
+                        </button>
+                        <button className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-gray-50 text-gray-600 text-sm">
+                          <span>🔄</span>
+                          <span>Repost</span>
+                        </button>
+                        <button className="flex items-center space-x-2 px-4 py-2 rounded-md hover:bg-gray-50 text-gray-600 text-sm">
+                          <span>📤</span>
+                          <span>Send</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
