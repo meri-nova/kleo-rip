@@ -14,7 +14,7 @@
   "host_permissions": [
     "https://linkedin.com/*",
     "https://*.linkedin.com/*",
-    "http://localhost:3000/*"
+    "http://localhost:3001/*"
   ],
   
   "background": {

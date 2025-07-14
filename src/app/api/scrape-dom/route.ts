@@ -2,25 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
+  // Add CORS headers for Chrome extension
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  }
+
   try {
     const { profileInfo, posts } = await request.json()
 
     if (!profileInfo || !posts || !Array.isArray(posts)) {
-      return NextResponse.json({ error: 'Profile info and posts array are required' }, { status: 400 })
+      return NextResponse.json({ error: 'Profile info and posts array are required' }, { status: 400, headers: corsHeaders })
     }
 
     console.log('Processing DOM-extracted posts:', posts.length)
 
     // Validate LinkedIn URL format
     if (!profileInfo.profileUrl || !profileInfo.profileUrl.includes('linkedin.com/in/')) {
-      return NextResponse.json({ error: 'Invalid LinkedIn profile URL' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid LinkedIn profile URL' }, { status: 400, headers: corsHeaders })
     }
 
     // Extract username from URL
     const username = profileInfo.profileUrl.split('/in/')[1]?.split('/')[0]
 
     // Check if profile already exists, create if not
-    let { data: existingProfile } = await supabaseAdmin
+    const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('linkedin_url', profileInfo.profileUrl)
@@ -45,7 +52,7 @@ export async function POST(request: NextRequest) {
 
       if (error || !newProfile) {
         console.error('Profile creation error:', error)
-        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500, headers: corsHeaders })
       }
 
       profileId = newProfile.id
@@ -67,13 +74,13 @@ export async function POST(request: NextRequest) {
         likes: parseInt(post.likes) || 0,
         comments: parseInt(post.comments) || 0,
         reposts: parseInt(post.reposts) || 0,
-        post_date: post.postDate || new Date().toISOString(),
+        post_date: post.postDate ? new Date(post.postDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         scraped_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }))
 
     if (validPosts.length === 0) {
-      return NextResponse.json({ error: 'No valid posts found in extracted data' }, { status: 400 })
+      return NextResponse.json({ error: 'No valid posts found in extracted data' }, { status: 400, headers: corsHeaders })
     }
 
     // Sort posts by likes descending before saving
@@ -94,7 +101,7 @@ export async function POST(request: NextRequest) {
         error: 'Failed to save posts to database', 
         details: postsError.message,
         code: postsError.code 
-      }, { status: 500 })
+      }, { status: 500, headers: corsHeaders })
     }
 
     // Update profile with latest scrape info
@@ -116,10 +123,22 @@ export async function POST(request: NextRequest) {
       profileId: profileId,
       postsCount: validPosts.length,
       message: `Successfully scraped ${validPosts.length} posts from LinkedIn DOM`
-    })
+    }, { headers: corsHeaders })
 
   } catch (error) {
     console.error('DOM scrape API error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500, headers: corsHeaders })
   }
+}
+
+// Handle preflight OPTIONS request
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Post, Profile } from '@/lib/supabase'
 import { useSearchParams } from 'next/navigation'
 
@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [scraping, setScraping] = useState(false)
   const [sortBy, setSortBy] = useState('likes')
   const [timeframe, setTimeframe] = useState('all')
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [, setJobId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set())
 
@@ -31,9 +31,9 @@ export default function Dashboard() {
       setJobId(initialJobId)
       pollJobStatus(initialJobId)
     }
-  }, [profileUrl, initialJobId, sortBy, timeframe])
+  }, [profileUrl, initialJobId, sortBy, timeframe, loadPosts, pollJobStatus])
 
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async () => {
     if (!profileUrl) return
     
     try {
@@ -56,9 +56,9 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [profileUrl, sortBy, timeframe])
 
-  const pollJobStatus = async (jobId: string) => {
+  const pollJobStatus = useCallback(async (jobId: string) => {
     setScraping(true)
     
     const poll = async () => {
@@ -88,7 +88,7 @@ export default function Dashboard() {
     }
     
     poll()
-  }
+  }, [loadPosts])
 
   const handleRefresh = async () => {
     if (!profileUrl) return
@@ -118,7 +118,13 @@ export default function Dashboard() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString()
+    if (!dateString) return 'Unknown date'
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    })
   }
 
   const formatNumber = (num: number) => {

@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Profile URL is required' }, { status: 400 })
     }
 
+    console.log('Posts API - Looking for profile:', profileUrl)
+
     // Get profile
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -19,8 +21,21 @@ export async function GET(request: NextRequest) {
       .eq('linkedin_url', profileUrl)
       .single()
 
+    console.log('Posts API - Profile lookup result:', { profile, profileError })
+
     if (profileError || !profile) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+      // Try to find all profiles to debug
+      const { data: allProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('linkedin_url')
+        .limit(10)
+      
+      console.log('Posts API - Available profiles:', allProfiles)
+      return NextResponse.json({ 
+        error: 'Profile not found', 
+        requestedUrl: profileUrl,
+        availableProfiles: allProfiles?.map(p => p.linkedin_url) || []
+      }, { status: 404 })
     }
 
     // Build query for posts

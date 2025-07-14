@@ -32,6 +32,7 @@ A powerful Chrome extension and web application that scrapes LinkedIn posts and 
 
 ### Prerequisites
 - Node.js 18+ installed
+- pnpm installed (`npm install -g pnpm`)
 - Chrome browser
 - Supabase account
 
@@ -39,7 +40,7 @@ A powerful Chrome extension and web application that scrapes LinkedIn posts and 
 ```bash
 git clone https://github.com/yourusername/linkedin-scraper.git
 cd linkedin-scraper
-npm install
+pnpm install
 ```
 
 ### 2. Environment Setup
@@ -51,14 +52,15 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_key
 ```
 
 ### 3. Database Setup
-Run the SQL schema in your Supabase dashboard:
-```sql
--- Copy contents from setup-db.sql
-```
+In your Supabase dashboard SQL editor, run the schema from `setup-db.sql`:
+1. Go to your Supabase project dashboard
+2. Click "SQL Editor" 
+3. Copy and paste the contents of `setup-db.sql`
+4. Click "Run" to create the tables
 
 ### 4. Start Development Server
 ```bash
-npm run dev
+pnpm dev
 ```
 Visit: http://localhost:3000
 
@@ -132,14 +134,17 @@ Check scraping job progress
 
 ## 🛠️ Development
 
+### Package Management
+This project uses pnpm as the package manager. The `pnpm-lock.yaml` file should be committed to version control to ensure consistent dependency versions across environments.
+
 ### Running Tests
 ```bash
-npm run test
+pnpm test
 ```
 
 ### Building for Production
 ```bash
-npm run build
+pnpm build
 ```
 
 ### Extension Development
@@ -150,16 +155,29 @@ npm run build
 
 ## 🚀 Deployment
 
-### Web App (Vercel)
-```bash
-npm run build
-# Deploy to Vercel
-```
+### Web App to Vercel
+1. **Connect to Vercel**:
+   - Push your code to GitHub/GitLab
+   - Connect your repository to Vercel
+   - Or use Vercel CLI: `npx vercel`
+
+2. **Environment Variables in Vercel**:
+   Set these in your Vercel project settings:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key  
+   SUPABASE_SERVICE_ROLE_KEY=your_service_key
+   ```
+
+3. **Deploy**:
+   - Vercel will automatically build and deploy
+   - Your app will be available at `your-project.vercel.app`
 
 ### Chrome Extension (Production)
-1. Build extension package
-2. Submit to Chrome Web Store
-3. Wait for approval (5-7 days)
+1. Build extension package from `chrome-extension/` folder
+2. Update `chrome-extension/background.js` API URL to your Vercel domain
+3. Submit to Chrome Web Store
+4. Wait for approval (5-7 days)
 
 ## 🤝 Contributing
 

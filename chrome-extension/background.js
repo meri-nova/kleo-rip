@@ -40,6 +40,11 @@ async function handleScrapeProfile(profileInfo, posts = null) {
 
     // If we have DOM-extracted posts, send them directly to the API
     if (posts && posts.length > 0) {
+      console.log(`🚀 Sending ${posts.length} posts to API...`);
+      console.log('API URL:', `${API_BASE_URL}/scrape-dom`);
+      console.log('Profile info:', profileInfo);
+      console.log('First post sample:', posts[0]);
+
       const response = await fetch(`${API_BASE_URL}/scrape-dom`, {
         method: 'POST',
         headers: {
@@ -51,11 +56,18 @@ async function handleScrapeProfile(profileInfo, posts = null) {
         })
       });
 
+      console.log('📡 API Response status:', response.status);
+      console.log('📡 API Response headers:', response.headers);
+
       const data = await response.json();
+      console.log('📡 API Response data:', data);
       
       if (!response.ok) {
+        console.error('❌ API Error:', data);
         throw new Error(data.error || 'Failed to save extracted posts');
       }
+
+      console.log('✅ API call successful!');
 
       // Build dashboard URL with parameters
       const dashboardParams = new URLSearchParams({
