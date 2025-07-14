@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   // Add CORS headers for Chrome extension
@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { profileInfo, posts } = await request.json()
 
     if (!profileInfo || !posts || !Array.isArray(posts)) {

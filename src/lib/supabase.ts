@@ -1,14 +1,30 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+// Runtime validation for environment variables
+function validateEnvVars() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing required Supabase environment variables')
+  }
+}
+
+function validateAdminEnvVars() {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing required Supabase admin environment variables')
+  }
+}
 
 // Client for browser/client-side operations
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Admin client for server-side operations
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+// Admin client for server-side operations with validation
+export function getSupabaseAdmin() {
+  validateAdminEnvVars()
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 // Database types
 export interface Profile {
