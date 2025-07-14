@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { Post, Profile } from '@/lib/supabase'
 import { useSearchParams } from 'next/navigation'
 
-export default function Dashboard() {
+function DashboardContent() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,16 +22,6 @@ export default function Dashboard() {
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  useEffect(() => {
-    if (profileUrl) {
-      loadPosts()
-    }
-    if (initialJobId) {
-      setJobId(initialJobId)
-      pollJobStatus(initialJobId)
-    }
-  }, [profileUrl, initialJobId, sortBy, timeframe, loadPosts, pollJobStatus])
 
   const loadPosts = useCallback(async () => {
     if (!profileUrl) return
@@ -89,6 +79,16 @@ export default function Dashboard() {
     
     poll()
   }, [loadPosts])
+
+  useEffect(() => {
+    if (profileUrl) {
+      loadPosts()
+    }
+    if (initialJobId) {
+      setJobId(initialJobId)
+      pollJobStatus(initialJobId)
+    }
+  }, [profileUrl, initialJobId, sortBy, timeframe, loadPosts, pollJobStatus])
 
   const handleRefresh = async () => {
     if (!profileUrl) return
@@ -365,5 +365,22 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-gray-900 mb-8">LinkedIn Post Scraper</h1>
+          <div className="bg-white rounded-lg shadow p-6">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   )
 }
