@@ -2,7 +2,7 @@
 (function() {
   'use strict';
 
-  // Simple Debug System
+  // Simplified Debug System for Production
   const debug = {
     enabled: true,
     
@@ -17,23 +17,6 @@
       const timestamp = new Date().toLocaleTimeString();
       console.error(`[${timestamp}] ❌ LinkedIn Scraper Error: ${message}`);
       if (error) console.error(error);
-    },
-    
-    inspect: function(selector, description) {
-      const elements = document.querySelectorAll(selector);
-      this.log(`${description}: Found ${elements.length} elements with selector "${selector}"`);
-      if (elements.length > 0 && elements.length <= 3) {
-        elements.forEach((el, i) => {
-          console.log(`  Element ${i}:`, el);
-        });
-      }
-      return elements;
-    },
-    
-    // Enable/disable debugging from console
-    toggle: function() {
-      this.enabled = !this.enabled;
-      console.log(`🔍 Debug mode ${this.enabled ? 'enabled' : 'disabled'}`);
     }
   };
 
@@ -129,24 +112,37 @@
     return null;
   }
 
+  // Simple and reliable repost detection using the proven CSS selector
+  function isRepost(postElement) {
+    // Use the structural selector that works all the time
+    const headerElement = postElement.querySelector('.update-components-header__text-view');
+    
+    if (headerElement && headerElement.textContent) {
+      const text = headerElement.textContent.trim();
+      // Check if this element contains any repost-related text
+      if (text.length > 0) {
+        debug.log(`🔄 Repost detected: "${text.substring(0, 100)}..."`);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
   // Extract data from a single post
   function extractPostData(postElement, index) {
     debug.log(`Extracting data from post ${index + 1}`);
     
-    // Get post content with multiple fallback selectors
+    // Check if this is a repost and skip it
+    if (isRepost(postElement)) {
+      debug.log(`❌ Post ${index + 1} is a REPOST - skipping`);
+      return null; // Return null to indicate this post should be skipped
+    }
+    
+    // Get post content with working selectors only
     const contentSelectors = [
-      '.feed-shared-text__text-view .break-words',
-      '.feed-shared-text .break-words',
-      '.feed-shared-text__text-view',
-      '.feed-shared-text',
-      '.feed-shared-update-v2__description .break-words',
-      '.feed-shared-update-v2__description',
-      '[data-test-id="main-feed-activity-card"] .break-words',
-      '[data-test-id="main-feed-activity-card"] p',
-      '.update-components-text .break-words',
-      '.update-components-text',
-      '.feed-shared-inline-show-more-text .break-words',
-      '.feed-shared-inline-show-more-text'
+      '.feed-shared-update-v2__description .break-words',  // Primary
+      '.feed-shared-update-v2__description',               // Fallback
     ];
     
     let content = '';
@@ -174,7 +170,7 @@
       }
     }
 
-    // Get engagement metrics
+    // Get engagement metrics (these are working perfectly)
     const likesElement = postElement.querySelector('.social-details-social-counts__reactions-count');
     const likesText = likesElement?.textContent || '0';
     const likes = parseNumber(likesText);
@@ -222,16 +218,9 @@
     // Extract real post publication date
     let postDate = new Date().toISOString(); // fallback to today
     
-    // Try multiple selectors to find the post date
+    // Use only the working selector found through testing
     const dateSelectors = [
-      '.update-components-actor__sub-description',
-      '.feed-shared-actor__sub-description',
-      '.update-components-actor .visually-hidden',
-      '.feed-shared-actor .visually-hidden',
-      '[data-test-id="main-feed-activity-card"] time',
-      'time[datetime]',
-      '.feed-shared-update-v2 time',
-      '.update-components-header time'
+      '.update-components-actor__sub-description'
     ];
     
     for (const selector of dateSelectors) {
@@ -280,26 +269,80 @@
     debug.log('🎯 Starting post extraction...');
     
     // Find all posts using the working selector
-    const postElements = debug.inspect('.feed-shared-update-v2', 'Post containers');
+    const postElements = document.querySelectorAll('.feed-shared-update-v2');
+    debug.log(`Found ${postElements.length} post elements in DOM`);
 
     const posts = [];
+    let filteredCount = 0;
+    let repostCount = 0;
+    let filteredReasons = {
+      noContent: 0,
+      shortContent: 0,
+      noEngagement: 0,
+      reposts: 0,
+      total: 0
+    };
+
     postElements.forEach((element, index) => {
       const postData = extractPostData(element, index);
       
-      // Include posts with any content OR engagement metrics (for image/video posts)
-      if (postData.content.length > 5 || postData.likes > 5 || postData.comments > 0) {
+      // Skip if post was identified as a repost
+      if (postData === null) {
+        repostCount++;
+        filteredCount++;
+        filteredReasons.reposts++;
+        filteredReasons.total++;
+        debug.log(`🔄 Post ${index + 1} SKIPPED: Repost detected`);
+        return; // Skip to next post
+      }
+      
+      // Enhanced logging for filtering decisions
+      const contentLength = postData.content ? postData.content.length : 0;
+      const hasEngagement = postData.likes > 0 || postData.comments > 0 || postData.reposts > 0;
+      const contentPreview = postData.content ? postData.content.substring(0, 50) + '...' : '[no content]';
+      
+      debug.log(`📝 Post ${index + 1}: ${contentLength} chars, ${postData.likes}L/${postData.comments}C/${postData.reposts}R - "${contentPreview}"`);
+      
+      // Relaxed filtering: Include posts with ANY content OR ANY engagement
+      if (contentLength > 1 || hasEngagement) {
         // Add placeholder content for posts without text (images/videos)
-        if (!postData.content || postData.content.length < 5) {
+        if (!postData.content || contentLength < 5) {
           postData.content = `[Image/Video Post - ${postData.likes} likes, ${postData.comments} comments, ${postData.reposts} reposts]`;
         }
         posts.push(postData);
-        debug.log(`✅ Post ${index + 1} added: ${postData.likes} likes, ${postData.comments} comments, ${postData.reposts} reposts`);
+        debug.log(`✅ Post ${index + 1} INCLUDED: ${postData.likes}L/${postData.comments}C/${postData.reposts}R`);
       } else {
-        debug.log(`❌ Post ${index + 1} skipped: no content and low engagement (${postData.content.length} chars, ${postData.likes} likes)`);
+        filteredCount++;
+        filteredReasons.total++;
+        
+        // Track specific reasons for filtering
+        if (contentLength === 0) {
+          filteredReasons.noContent++;
+          debug.log(`❌ Post ${index + 1} FILTERED: No content`);
+        } else if (contentLength === 1) {
+          filteredReasons.shortContent++;
+          debug.log(`❌ Post ${index + 1} FILTERED: Content too short (${contentLength} chars)`);
+        } else if (!hasEngagement) {
+          filteredReasons.noEngagement++;
+          debug.log(`❌ Post ${index + 1} FILTERED: No engagement (${postData.likes}L/${postData.comments}C/${postData.reposts}R)`);
+        }
       }
     });
 
-    debug.log(`📊 Final extraction results: ${posts.length} valid posts out of ${postElements.length} total`);
+    // Enhanced final statistics
+    debug.log(`📊 EXTRACTION SUMMARY:`);
+    debug.log(`  🔍 Total posts found: ${postElements.length}`);
+    debug.log(`  ✅ Posts included: ${posts.length}`);
+    debug.log(`  ❌ Posts filtered: ${filteredCount}`);
+    debug.log(`  🔄 Reposts skipped: ${repostCount}`);
+    debug.log(`  📈 Inclusion rate: ${((posts.length / postElements.length) * 100).toFixed(1)}%`);
+    debug.log(`  🎯 Original content rate: ${(((posts.length) / (postElements.length - repostCount)) * 100).toFixed(1)}%`);
+    debug.log(`📊 FILTERING BREAKDOWN:`);
+    debug.log(`  Reposts: ${filteredReasons.reposts}`);
+    debug.log(`  No content: ${filteredReasons.noContent}`);
+    debug.log(`  Short content: ${filteredReasons.shortContent}`);
+    debug.log(`  No engagement: ${filteredReasons.noEngagement}`);
+    
     return posts;
   }
 
@@ -309,15 +352,30 @@
       let scrollCount = 0;
       let lastPostCount = 0;
       let noNewPostsCount = 0;
-      const maxNoNewPosts = 5; // Stop after 5 attempts with no new posts
+      let ineffectiveClicksCount = 0;
+      const maxNoNewPosts = 8; // Stop after 8 attempts with no new posts (increased from 5)
+      const maxIneffectiveClicks = 12; // Stop after 12 button clicks that don't load new posts (increased from 7)
       
       debug.log('🎯 Starting infinite scroll and button clicking to load entire post history...');
       
       function scroll() {
+        // Check if user clicked stop
+        if (shouldStopScraping) {
+          debug.log('🛑 Scraping stopped by user');
+          resolve();
+          return;
+        }
+        
         const currentPosts = document.querySelectorAll('.feed-shared-update-v2');
         const currentPostCount = currentPosts.length;
         
         debug.log(`Attempt ${scrollCount}: Found ${currentPostCount} posts total`);
+        
+        // Update button with current post count during scrolling
+        const button = document.getElementById('linkedin-scraper-btn');
+        if (button) {
+          button.textContent = `📊 Loading... (${currentPostCount} posts)`;
+        }
         
         // First, scroll to bottom to trigger any lazy loading
         window.scrollTo(0, document.body.scrollHeight);
@@ -336,6 +394,8 @@
         ];
         
         let buttonClicked = false;
+        let postCountBeforeClick = currentPostCount;
+        
         for (const selector of showMoreSelectors) {
           // Handle :contains() selector manually since it's not native
           if (selector.includes(':contains(')) {
@@ -366,21 +426,50 @@
         
         if (buttonClicked) {
           debug.log('🔵 Clicked "Show more" button, waiting for content to load...');
-          noNewPostsCount = 0; // Reset counter when we click a button
+          // Don't reset noNewPostsCount here - we'll check if the click was effective first
         }
         
-        // Check if we got new posts
+        // Check if we got new posts after button click or scroll
         if (currentPostCount === lastPostCount && !buttonClicked) {
+          // No button found and no new posts
           noNewPostsCount++;
           debug.log(`⚠️ No new posts loaded and no button found (${noNewPostsCount}/${maxNoNewPosts})`);
           
           if (noNewPostsCount >= maxNoNewPosts) {
             debug.log('🏁 Reached end of posts - no more "Show more" buttons or content. Stopping.');
+            
+            // Show continue loading button
+            const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+            if (continueButton) {
+              continueButton.style.display = 'block';
+              debug.log('📢 Showing "Continue Loading" button for manual retry');
+            }
+            
+            resolve();
+            return;
+          }
+        } else if (currentPostCount === lastPostCount && buttonClicked) {
+          // Button was clicked but no new posts appeared - ineffective click
+          ineffectiveClicksCount++;
+          debug.log(`⚠️ Button clicked but no new posts loaded (ineffective click ${ineffectiveClicksCount}/${maxIneffectiveClicks})`);
+          
+          if (ineffectiveClicksCount >= maxIneffectiveClicks) {
+            debug.log('🏁 Reached end of posts - button clicks no longer load new content. Stopping.');
+            
+            // Show continue loading button
+            const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+            if (continueButton) {
+              continueButton.style.display = 'block';
+              debug.log('📢 Showing "Continue Loading" button for manual retry');
+            }
+            
             resolve();
             return;
           }
         } else if (currentPostCount > lastPostCount) {
-          noNewPostsCount = 0; // Reset counter if we got new posts
+          // Got new posts - reset both counters
+          noNewPostsCount = 0;
+          ineffectiveClicksCount = 0;
           debug.log(`✅ Loaded ${currentPostCount - lastPostCount} new posts`);
         }
         
@@ -388,7 +477,7 @@
         scrollCount++;
         
         // Wait longer for content to load after clicking buttons
-        const waitTime = buttonClicked ? 5000 : 3000;
+        const waitTime = buttonClicked ? 12000 : 5000; // Increased wait times for better loading
         setTimeout(scroll, waitTime);
       }
 
@@ -421,6 +510,344 @@
 
     button.addEventListener('click', handleScrapeClick);
     document.body.appendChild(button);
+    
+    // Create stop button (initially hidden)
+    const stopButton = document.createElement('button');
+    stopButton.id = 'linkedin-scraper-stop-btn';
+    stopButton.innerHTML = '⏹️ Stop & Save';
+    stopButton.style.cssText = `
+      position: fixed;
+      top: 130px;
+      right: 20px;
+      z-index: 10000;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 14px;
+      display: none;
+    `;
+
+    stopButton.addEventListener('click', handleStopAndSave);
+    document.body.appendChild(stopButton);
+    
+    // Create download-only button
+    const downloadButton = document.createElement('button');
+    downloadButton.id = 'linkedin-scraper-download-btn';
+    downloadButton.innerHTML = '📦 Download Only';
+    downloadButton.style.cssText = `
+      position: fixed;
+      top: 180px;
+      right: 20px;
+      z-index: 10000;
+      background: #9b59b6;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 14px;
+    `;
+
+    downloadButton.addEventListener('click', handleDownloadOnlyMode);
+    document.body.appendChild(downloadButton);
+    
+    // Create continue loading button (initially hidden)
+    const continueButton = document.createElement('button');
+    continueButton.id = 'linkedin-scraper-continue-btn';
+    continueButton.innerHTML = '🔄 Continue Loading';
+    continueButton.style.cssText = `
+      position: fixed;
+      top: 230px;
+      right: 20px;
+      z-index: 10000;
+      background: #f39c12;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 14px;
+      display: none;
+    `;
+
+    continueButton.addEventListener('click', handleContinueLoading);
+    document.body.appendChild(continueButton);
+  }
+
+  // Global variables to control scraping
+  let isScrapingActive = false;
+  let shouldStopScraping = false;
+  let forceDownloadMode = false;
+  let currentScrollPromiseResolve = null;
+
+  // Fallback: Save data locally if extension fails
+  function saveDataAsDownload(profileInfo, posts) {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const username = profileInfo.username || 'unknown';
+      
+      const data = {
+        profileInfo,
+        scrapedAt: new Date().toISOString(),
+        posts: posts
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${username}_${timestamp}_posts_backup.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      debug.log(`📦 Data saved as download: ${link.download}`);
+      return true;
+    } catch (error) {
+      debug.error('Failed to save data as download:', error);
+      return false;
+    }
+  }
+
+  // Stop and save current posts
+  async function handleStopAndSave() {
+    debug.log('⏹️ Stop button clicked - saving current posts...');
+    shouldStopScraping = true;
+    
+    const stopButton = document.getElementById('linkedin-scraper-stop-btn');
+    const mainButton = document.getElementById('linkedin-scraper-btn');
+    
+    stopButton.textContent = '⏳ Stopping...';
+    stopButton.disabled = true;
+    
+    // Extract and save current posts
+    await saveCurrentPosts();
+  }
+
+  // Extract and save posts without scrolling
+  async function saveCurrentPosts() {
+    try {
+      const posts = extractPosts();
+      const profileInfo = getProfileInfo();
+      
+      debug.log('📊 Saving current posts:', { profileInfo, postsCount: posts.length });
+
+      if (posts.length === 0) {
+        throw new Error('No posts found to save');
+      }
+
+      // Use download mode if forced or extension issues
+      if (forceDownloadMode) {
+        const success = saveDataAsDownload(profileInfo, posts);
+        if (success) {
+          const mainButton = document.getElementById('linkedin-scraper-btn');
+          mainButton.textContent = `📦 ${posts.length} posts downloaded!`;
+          setTimeout(() => {
+            mainButton.textContent = '📊 Scrape Posts';
+          }, 5000);
+          return;
+        }
+      }
+
+      await sendPostsToBackground(profileInfo, posts);
+      
+    } catch (error) {
+      debug.error('Failed to save current posts', error);
+      const mainButton = document.getElementById('linkedin-scraper-btn');
+      mainButton.textContent = '❌ Failed';
+    }
+  }
+
+  // Handle download-only mode
+  async function handleDownloadOnlyMode() {
+    debug.log('📦 Download-only mode activated');
+    forceDownloadMode = true;
+    
+    const downloadButton = document.getElementById('linkedin-scraper-download-btn');
+    downloadButton.textContent = '⏳ Loading...';
+    downloadButton.disabled = true;
+    
+    try {
+      // Start regular scraping workflow but force download mode
+      await handleScrapeClick();
+    } catch (error) {
+      debug.error('Download-only mode failed', error);
+      downloadButton.textContent = '❌ Failed';
+    } finally {
+      downloadButton.disabled = false;
+      setTimeout(() => {
+        downloadButton.textContent = '📦 Download Only';
+        forceDownloadMode = false;
+      }, 3000);
+    }
+  }
+
+  // Handle continue loading
+  async function handleContinueLoading() {
+    debug.log('🔄 Continue loading activated');
+    
+    const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+    const mainButton = document.getElementById('linkedin-scraper-btn');
+    
+    continueButton.textContent = '⏳ Loading...';
+    continueButton.disabled = true;
+    continueButton.style.display = 'none';
+    
+    try {
+      // Reset scraping state
+      shouldStopScraping = false;
+      
+      // Show main button as loading again
+      mainButton.textContent = '⏳ Continuing...';
+      mainButton.disabled = true;
+      
+      // Continue auto-scroll
+      await autoScroll();
+      
+      // Extract posts after continued loading
+      mainButton.textContent = '⏳ Extracting...';
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const posts = extractPosts();
+      const profileInfo = getProfileInfo();
+      
+      if (posts.length === 0) {
+        throw new Error('No posts found after continued loading');
+      }
+
+      // Save posts (respecting download mode if set)
+      await saveCurrentPosts();
+      
+    } catch (error) {
+      debug.error('Continue loading failed', error);
+      mainButton.textContent = '❌ Failed';
+      setTimeout(() => {
+        mainButton.textContent = '📊 Scrape Posts';
+      }, 3000);
+    } finally {
+      continueButton.disabled = false;
+      continueButton.textContent = '🔄 Continue Loading';
+      mainButton.disabled = false;
+    }
+  }
+
+  // Enhanced Chrome runtime connection with retry logic
+  async function sendPostsToBackground(profileInfo, posts, retryCount = 0) {
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+    
+    // Enhanced runtime availability check
+    function isRuntimeAvailable() {
+      try {
+        return !!(chrome && chrome.runtime && chrome.runtime.sendMessage && chrome.runtime.id);
+      } catch (e) {
+        return false;
+      }
+    }
+    
+    if (!isRuntimeAvailable()) {
+      if (retryCount < maxRetries) {
+        debug.log(`⚠️ Runtime unavailable, retrying in ${retryDelay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        return sendPostsToBackground(profileInfo, posts, retryCount + 1);
+      } else {
+        throw new Error(`Chrome extension runtime not available after ${maxRetries} attempts. Please:\n1. Reload the extension in chrome://extensions/\n2. Refresh this LinkedIn page\n3. Try scraping again`);
+      }
+    }
+    
+    debug.log('✅ Chrome runtime available, sending message...');
+    
+    return new Promise((resolve, reject) => {
+      // Set a timeout for the message response
+      const messageTimeout = setTimeout(() => {
+        reject(new Error('Message timeout - extension may be unresponsive'));
+      }, 10000); // 10 second timeout
+      
+      chrome.runtime.sendMessage({
+        action: 'scrapeProfile',
+        profileInfo: profileInfo,
+        posts: posts
+      }, (response) => {
+        clearTimeout(messageTimeout);
+        
+        if (chrome.runtime.lastError) {
+          const error = chrome.runtime.lastError.message;
+          debug.error('Runtime error:', error);
+          
+          // If it's a connection error and we haven't retried enough, try again
+          if (error.includes('Extension context invalidated') && retryCount < maxRetries) {
+            debug.log(`🔄 Extension context invalidated, retrying... (attempt ${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => {
+              sendPostsToBackground(profileInfo, posts, retryCount + 1)
+                .then(resolve)
+                .catch(reject);
+            }, retryDelay);
+            return;
+          }
+          
+          // Try fallback download if extension completely fails
+          if (error.includes('Could not establish connection') || 
+              error.includes('Extension context invalidated') ||
+              error.includes('message port closed')) {
+            debug.log('🔄 Extension failed, attempting fallback download...');
+            try {
+              const success = saveDataAsDownload(profileInfo, posts);
+              if (success) {
+                resolve({ success: true, method: 'download', message: 'Data saved as download due to extension issues' });
+                return;
+              }
+            } catch (fallbackError) {
+              debug.error('Fallback download also failed:', fallbackError);
+            }
+          }
+          
+          reject(new Error(`Extension error: ${error}`));
+          return;
+        }
+        
+        if (response?.success) {
+          debug.log('✅ Posts saved successfully!', response);
+          
+          const mainButton = document.getElementById('linkedin-scraper-btn');
+          const stopButton = document.getElementById('linkedin-scraper-stop-btn');
+          
+          // Different messages for different save methods
+          if (response.method === 'download') {
+            mainButton.textContent = `📦 ${posts.length} posts downloaded!`;
+          } else {
+            mainButton.textContent = `✅ ${posts.length} posts saved!`;
+          }
+          
+          mainButton.disabled = false;
+          stopButton.style.display = 'none';
+          
+          // Restore other buttons
+          const downloadButton = document.getElementById('linkedin-scraper-download-btn');
+          const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+          if (downloadButton) downloadButton.style.display = 'block';
+          if (continueButton) continueButton.style.display = 'none'; // Hide continue button on success
+          
+          setTimeout(() => {
+            mainButton.textContent = '📊 Scrape Posts';
+          }, 5000);
+          
+          resolve(response);
+        } else {
+          reject(new Error(response?.error || 'Failed to save posts'));
+        }
+      });
+    });
   }
 
   // Main scraping workflow
@@ -429,8 +856,20 @@
       debug.log('🚀 Starting LinkedIn scrape workflow...');
       
       const button = document.getElementById('linkedin-scraper-btn');
+      const stopButton = document.getElementById('linkedin-scraper-stop-btn');
+      
       button.textContent = '⏳ Scrolling...';
       button.disabled = true;
+      stopButton.style.display = 'block';
+      
+      // Hide other buttons during scraping
+      const downloadButton = document.getElementById('linkedin-scraper-download-btn');
+      const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+      if (downloadButton) downloadButton.style.display = 'none';
+      if (continueButton) continueButton.style.display = 'none';
+      
+      isScrapingActive = true;
+      shouldStopScraping = false;
 
       // Auto-scroll to load ALL posts
       await autoScroll();
@@ -449,35 +888,70 @@
         throw new Error('No posts found. Try visiting the activity page: /recent-activity/all/');
       }
 
-      // Send to background script
+      // Send to background script using the new function
       button.textContent = '⏳ Saving...';
-      debug.log('Sending to background script:', { profileInfo, postsCount: posts.length });
+      await sendPostsToBackground(profileInfo, posts);
       
-      chrome.runtime.sendMessage({
-        action: 'scrapeProfile',
-        profileInfo: profileInfo,
-        posts: posts
-      }, (response) => {
-        if (response?.success) {
-          debug.log('✅ Scrape completed successfully!', response);
-          button.textContent = `✅ ${posts.length} posts!`;
-          setTimeout(() => {
-            button.textContent = '📊 Scrape Posts';
-            button.disabled = false;
-          }, 5000);
-        } else {
-          throw new Error(response?.error || 'Failed to save posts');
-        }
-      });
+      isScrapingActive = false;
 
     } catch (error) {
       debug.error('Scraping failed', error);
       const button = document.getElementById('linkedin-scraper-btn');
-      button.textContent = '❌ Failed';
+      const stopButton = document.getElementById('linkedin-scraper-stop-btn');
+      
+      // Provide specific error messages based on error type
+      if (error.message.includes('Chrome extension runtime not available')) {
+        button.textContent = '🔌 Extension Issue';
+        // Show helpful instructions in console
+        console.log('🔧 EXTENSION TROUBLESHOOTING:');
+        console.log('1. Go to chrome://extensions/');
+        console.log('2. Find "LinkedIn Scraper" and click the reload button');
+        console.log('3. Refresh this LinkedIn page');
+        console.log('4. Try scraping again');
+      } else if (error.message.includes('No posts found')) {
+        button.textContent = '📭 No Posts';
+        console.log('💡 TIP: Try visiting the user\'s activity page: /recent-activity/all/');
+      } else if (error.message.includes('timeout')) {
+        button.textContent = '⏱️ Timeout';
+        console.log('💡 TIP: The page may be loading slowly. Try again in a few seconds.');
+      } else {
+        button.textContent = '❌ Failed';
+      }
+      
       button.disabled = false;
+      stopButton.style.display = 'none';
+      isScrapingActive = false;
+      
+      // Restore other buttons
+      const downloadButton = document.getElementById('linkedin-scraper-download-btn');
+      const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+      if (downloadButton) downloadButton.style.display = 'block';
+      // Don't show continue button unless needed
+      
       setTimeout(() => {
         button.textContent = '📊 Scrape Posts';
-      }, 3000);
+      }, 5000);
+    }
+  }
+
+  // Check extension health on startup
+  function checkExtensionHealth() {
+    try {
+      if (!chrome || !chrome.runtime) {
+        console.warn('⚠️ Chrome extension APIs not available. Scraper will use download fallback.');
+        return false;
+      }
+      
+      if (!chrome.runtime.id) {
+        console.warn('⚠️ Extension context may be invalid. Consider reloading the extension.');
+        return false;
+      }
+      
+      debug.log('✅ Extension health check passed');
+      return true;
+    } catch (error) {
+      console.warn('⚠️ Extension health check failed:', error.message);
+      return false;
     }
   }
 
@@ -487,149 +961,18 @@
 
     debug.log('🎯 Simple LinkedIn scraper loaded');
     
+    // Check extension health
+    const extensionHealthy = checkExtensionHealth();
+    if (!extensionHealthy) {
+      console.log('📦 Scraper will save data as downloads if extension connection fails');
+    }
+    
     // Wait for page to load, then create button
     setTimeout(() => {
       createScrapeButton();
     }, 2000);
   }
 
-  // Expose debug tools to browser console
-  window.LinkedInScraperDebug = {
-    debug: debug,
-    extractPosts: extractPosts,
-    inspectSelectors: function() {
-      debug.inspect('.feed-shared-update-v2', 'Post containers');
-      debug.inspect('.feed-shared-text__text-view .break-words', 'Post content (primary)');
-      debug.inspect('.feed-shared-text .break-words', 'Post content (alt 1)');
-      debug.inspect('.feed-shared-text__text-view', 'Post content (alt 2)');
-      debug.inspect('.social-details-social-counts__reactions-count', 'Likes');
-      debug.inspect('.social-details-social-counts__comments .social-details-social-counts__count-value', 'Comments');
-      debug.inspect('[aria-label*="repost"]', 'Reposts');
-    },
-    findPostUrls: function() {
-      debug.log('🔍 COMPREHENSIVE POST URL SEARCH 🔍');
-      
-      // Get all posts
-      const posts = document.querySelectorAll('.feed-shared-update-v2');
-      debug.log(`Found ${posts.length} posts to analyze`);
-      
-      posts.forEach((post, postIndex) => {
-        if (postIndex >= 3) return; // Only analyze first 3 posts
-        
-        debug.log(`\n=== POST ${postIndex + 1} URL ANALYSIS ===`);
-        
-        // Find ALL links in this post
-        const allLinks = post.querySelectorAll('a[href]');
-        debug.log(`Total links in post: ${allLinks.length}`);
-        
-        allLinks.forEach((link, linkIndex) => {
-          const href = link.href;
-          const text = link.textContent?.trim().substring(0, 50) || '[no text]';
-          const classes = link.className || '[no classes]';
-          
-          // Categorize the link
-          let category = 'other';
-          if (href.includes('/posts/')) category = '🎯 POST URL';
-          else if (href.includes('activity-')) category = '📝 ACTIVITY';
-          else if (href.includes('/feed/update/')) category = '🔄 FEED UPDATE';
-          else if (href.includes('/pulse/')) category = '📰 ARTICLE';
-          else if (href.includes('/in/')) category = '👤 PROFILE';
-          else if (href.includes('/company/')) category = '🏢 COMPANY';
-          
-          if (category.includes('🎯') || category.includes('📝') || category.includes('🔄')) {
-            debug.log(`  ${category} Link ${linkIndex}: ${href}`);
-            debug.log(`    Text: "${text}"`);
-            debug.log(`    Classes: ${classes}`);
-            console.log(`    Element:`, link);
-          }
-        });
-        
-        // Check data attributes that might contain URLs
-        const dataUrn = post.getAttribute('data-urn');
-        if (dataUrn) {
-          debug.log(`  📊 Data URN: ${dataUrn}`);
-        }
-        
-        // Check for any elements with post-related data attributes
-        const dataElements = post.querySelectorAll('[data-urn], [data-id*="activity"], [data-post-id]');
-        dataElements.forEach((el, i) => {
-          debug.log(`  📊 Data element ${i}:`);
-          debug.log(`    data-urn: ${el.getAttribute('data-urn') || 'none'}`);
-          debug.log(`    data-id: ${el.getAttribute('data-id') || 'none'}`);
-          debug.log(`    data-post-id: ${el.getAttribute('data-post-id') || 'none'}`);
-        });
-      });
-      
-      debug.log('\n🎯 SUMMARY: Look for links marked with 🎯 POST URL or 📝 ACTIVITY above!');
-    },
-    inspectFirstPost: function() {
-      const firstPost = document.querySelector('.feed-shared-update-v2');
-      if (firstPost) {
-        debug.log('🔍 Inspecting first post structure...');
-        console.log('First post element:', firstPost);
-        
-        // Try all content selectors on first post
-        const contentSelectors = [
-          '.feed-shared-text__text-view .break-words',
-          '.feed-shared-text .break-words',
-          '.feed-shared-text__text-view',
-          '.feed-shared-text',
-          '.feed-shared-update-v2__description .break-words',
-          '.feed-shared-update-v2__description'
-        ];
-        
-        contentSelectors.forEach(selector => {
-          const element = firstPost.querySelector(selector);
-          if (element) {
-            debug.log(`✅ Content found with "${selector}": "${element.textContent?.trim().substring(0, 100)}..."`);
-          } else {
-            debug.log(`❌ Content not found: "${selector}"`);
-          }
-        });
-
-        // Try all URL selectors on first post
-        const urlSelectors = [
-          'a[href*="/posts/"]',
-          'a[href*="activity-"]',
-          '.feed-shared-update-v2 a[href*="/posts/"]',
-          '.update-components-actor a[href*="/posts/"]',
-          '[data-urn] a[href*="/posts/"]',
-          'a[href*="/pulse/"]'
-        ];
-        
-        debug.log('🔗 Looking for post URLs...');
-        urlSelectors.forEach(selector => {
-          const element = firstPost.querySelector(selector);
-          if (element && element.href) {
-            debug.log(`✅ URL found with "${selector}": ${element.href}`);
-          } else {
-            debug.log(`❌ URL not found: "${selector}"`);
-          }
-        });
-
-        // Show all links in the post
-        const allLinks = firstPost.querySelectorAll('a[href]');
-        debug.log(`🔗 All links in post (${allLinks.length} total):`);
-        allLinks.forEach((link, i) => {
-          if (i < 5) { // Show first 5 links
-            debug.log(`  Link ${i}: ${link.href}`);
-          }
-        });
-      } else {
-        debug.log('❌ No posts found on page');
-      }
-    },
-    testExtraction: function() {
-      debug.log('🧪 Testing post extraction...');
-      return extractPosts();
-    },
-    toggleDebug: function() {
-      debug.toggle();
-    }
-  };
-
-  debug.log('🔧 Debug tools available at: window.LinkedInScraperDebug');
-  
   // Start the scraper
   init();
 

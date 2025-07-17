@@ -65,9 +65,28 @@ export async function POST(request: NextRequest) {
       .delete()
       .eq('profile_id', profileId)
 
-    // Process and validate posts
+    // Enhanced logging and relaxed filtering for Supabase
+    console.log(`📊 Supabase API: Processing ${posts.length} posts from extension`);
+    
     const validPosts = posts
-      .filter(post => post.content && post.content.length > 50)
+      .filter((post, index) => {
+        const hasContent = post.content && post.content.length > 0;
+        const contentLength = post.content ? post.content.length : 0;
+        const isValidLength = contentLength > 5; // Relaxed from 50 to 5
+        
+        if (!hasContent) {
+          console.log(`❌ Supabase: Post ${index + 1} filtered - No content`);
+          return false;
+        }
+        
+        if (!isValidLength) {
+          console.log(`❌ Supabase: Post ${index + 1} filtered - Content too short (${contentLength} chars)`);
+          return false;
+        }
+        
+        console.log(`✅ Supabase: Post ${index + 1} accepted - ${contentLength} chars`);
+        return true;
+      })
       .map((post, index) => ({
         profile_id: profileId,
         linkedin_post_url: post.linkedinPostUrl || `${profileInfo.profileUrl}/activity/post-${Date.now()}-${index}`,
@@ -75,9 +94,7 @@ export async function POST(request: NextRequest) {
         likes: parseInt(post.likes) || 0,
         comments: parseInt(post.comments) || 0,
         reposts: parseInt(post.reposts) || 0,
-        post_date: post.postDate ? new Date(post.postDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        scraped_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        post_date: post.postDate ? new Date(post.postDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       }))
 
     if (validPosts.length === 0) {

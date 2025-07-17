@@ -39,6 +39,10 @@ chrome-extension/icons/*.png
 # Database setup scripts (keep .sql but not .js)
 setup-database.js
 
+# Scraped data files (local testing)
+scraped-data/profiles/*.json
+scraped-data/posts/*.json
+
 # IDE
 .vscode/
 .idea/

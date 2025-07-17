@@ -40,12 +40,12 @@ async function handleScrapeProfile(profileInfo, posts = null) {
 
     // If we have DOM-extracted posts, send them directly to the API
     if (posts && posts.length > 0) {
-      console.log(`🚀 Sending ${posts.length} posts to API...`);
-      console.log('API URL:', `${API_BASE_URL}/scrape-dom`);
+      console.log(`🚀 Sending ${posts.length} posts to LOCAL API...`);
+      console.log('API URL:', `${API_BASE_URL}/scrape-local`);
       console.log('Profile info:', profileInfo);
       console.log('First post sample:', posts[0]);
 
-      const response = await fetch(`${API_BASE_URL}/scrape-dom`, {
+      const response = await fetch(`${API_BASE_URL}/scrape-local`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,27 +67,21 @@ async function handleScrapeProfile(profileInfo, posts = null) {
         throw new Error(data.error || 'Failed to save extracted posts');
       }
 
-      console.log('✅ API call successful!');
+      console.log('✅ Local API call successful!');
+      console.log('📁 Files saved:', data.files);
+      console.log('📊 Top posts:', data.topPosts);
 
-      // Build dashboard URL with parameters
-      const dashboardParams = new URLSearchParams({
-        profile: profileInfo.profileUrl,
-        fresh: 'true'
-      });
-
-      const dashboardUrl = `${DASHBOARD_URL}?${dashboardParams.toString()}`;
-
-      // Open dashboard in new tab
-      const tab = await chrome.tabs.create({
-        url: dashboardUrl,
-        active: true
-      });
+      // For local testing, don't open dashboard, just show success
+      console.log(`🎉 SUCCESS: ${data.postsCount} posts saved to local files!`);
+      console.log(`📄 Profile file: ${data.files?.profile}`);
+      console.log(`📄 Posts file: ${data.files?.posts}`);
 
       return {
-        tabId: tab.id,
-        dashboardUrl: dashboardUrl,
         postsCount: posts.length,
-        method: 'dom-extraction'
+        method: 'local-file-storage',
+        files: data.files,
+        topPosts: data.topPosts,
+        message: data.message
       };
     } else {
       // No DOM posts available
