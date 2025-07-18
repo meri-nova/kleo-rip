@@ -15,12 +15,47 @@ export async function GET(request: NextRequest) {
 
     console.log('Posts API - Looking for profile:', profileUrl)
 
-    // Get profile
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Normalize the profile URL for flexible matching
+    const normalizeUrl = (url: string) => {
+      return url.toLowerCase()
+        .replace(/https?:\/\//, '') // Remove protocol
+        .replace(/www\./, '') // Remove www
+        .replace(/\/$/, '') // Remove trailing slash
+    }
+
+    const normalizedSearchUrl = normalizeUrl(profileUrl)
+
+    // Get profile with flexible URL matching
+    let profile = null
+    let profileError = null
+
+    // First try exact match
+    const exactMatch = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('linkedin_url', profileUrl)
       .single()
+
+    if (exactMatch.data) {
+      profile = exactMatch.data
+    } else {
+      // Try flexible matching - get all profiles and match normalized URLs
+      const { data: allProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+      
+      if (allProfiles) {
+        profile = allProfiles.find(p => {
+          const normalizedStoredUrl = normalizeUrl(p.linkedin_url || '')
+          return normalizedStoredUrl.includes(normalizedSearchUrl) || 
+                 normalizedSearchUrl.includes(normalizedStoredUrl)
+        })
+      }
+      
+      if (!profile) {
+        profileError = exactMatch.error
+      }
+    }
 
     console.log('Posts API - Profile lookup result:', { profile, profileError })
 
@@ -35,6 +70,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Profile not found', 
         requestedUrl: profileUrl,
+        normalizedUrl: normalizedSearchUrl,
         availableProfiles: allProfiles?.map(p => p.linkedin_url) || []
       }, { status: 404 })
     }

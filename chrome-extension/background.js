@@ -70,9 +70,10 @@ async function handleScrapeProfile(profileInfo, posts = null) {
       console.log('✅ Supabase API call successful!');
       console.log('📊 Posts saved to database:', data.postsCount);
 
-      // Open dashboard to view results
+      // Open dashboard to view results with profile URL
+      const dashboardUrl = `${DASHBOARD_URL}?profile=${encodeURIComponent(profileInfo.profileUrl)}`;
       chrome.tabs.create({
-        url: DASHBOARD_URL,
+        url: dashboardUrl,
         active: true
       });
 
