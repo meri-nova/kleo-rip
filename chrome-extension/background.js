@@ -1,7 +1,7 @@
 // Background script for LinkedIn Post Scraper extension
 
-const DASHBOARD_URL = 'http://localhost:3000/dashboard';
-const API_BASE_URL = 'http://localhost:3000/api';
+const DASHBOARD_URL = 'https://kleo-rip.vercel.app/dashboard';
+const API_BASE_URL = 'https://kleo-rip.vercel.app/api';
 
 // Handle messages from popup and content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -40,12 +40,12 @@ async function handleScrapeProfile(profileInfo, posts = null) {
 
     // If we have DOM-extracted posts, send them directly to the API
     if (posts && posts.length > 0) {
-      console.log(`🚀 Sending ${posts.length} posts to LOCAL API...`);
-      console.log('API URL:', `${API_BASE_URL}/scrape-local`);
+      console.log(`🚀 Sending ${posts.length} posts to Supabase API...`);
+      console.log('API URL:', `${API_BASE_URL}/scrape-dom`);
       console.log('Profile info:', profileInfo);
       console.log('First post sample:', posts[0]);
 
-      const response = await fetch(`${API_BASE_URL}/scrape-local`, {
+      const response = await fetch(`${API_BASE_URL}/scrape-dom`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,20 +67,19 @@ async function handleScrapeProfile(profileInfo, posts = null) {
         throw new Error(data.error || 'Failed to save extracted posts');
       }
 
-      console.log('✅ Local API call successful!');
-      console.log('📁 Files saved:', data.files);
-      console.log('📊 Top posts:', data.topPosts);
+      console.log('✅ Supabase API call successful!');
+      console.log('📊 Posts saved to database:', data.postsCount);
 
-      // For local testing, don't open dashboard, just show success
-      console.log(`🎉 SUCCESS: ${data.postsCount} posts saved to local files!`);
-      console.log(`📄 Profile file: ${data.files?.profile}`);
-      console.log(`📄 Posts file: ${data.files?.posts}`);
+      // Open dashboard to view results
+      chrome.tabs.create({
+        url: DASHBOARD_URL,
+        active: true
+      });
 
       return {
-        postsCount: posts.length,
-        method: 'local-file-storage',
-        files: data.files,
-        topPosts: data.topPosts,
+        postsCount: data.postsCount,
+        method: 'supabase-database',
+        profileId: data.profileId,
         message: data.message
       };
     } else {
