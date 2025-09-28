@@ -1,7 +1,7 @@
 // Background script for LinkedIn Post Scraper extension
 
 const DASHBOARD_URL = 'https://kleo-rip.vercel.app/dashboard';
-const API_BASE_URL = 'https://kleo-rip.vercel.app/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 // Handle messages from popup and content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -40,12 +40,12 @@ async function handleScrapeProfile(profileInfo, posts = null) {
 
     // If we have DOM-extracted posts, send them directly to the API
     if (posts && posts.length > 0) {
-      console.log(`🚀 Sending ${posts.length} posts to Supabase API...`);
-      console.log('API URL:', `${API_BASE_URL}/scrape-dom`);
+      console.log(`🚀 Sending ${posts.length} posts to local API...`);
+      console.log('API URL:', `${API_BASE_URL}/scrape-local`);
       console.log('Profile info:', profileInfo);
       console.log('First post sample:', posts[0]);
 
-      const response = await fetch(`${API_BASE_URL}/scrape-dom`, {
+      const response = await fetch(`${API_BASE_URL}/scrape-local`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,8 +67,8 @@ async function handleScrapeProfile(profileInfo, posts = null) {
         throw new Error(data.error || 'Failed to save extracted posts');
       }
 
-      console.log('✅ Supabase API call successful!');
-      console.log('📊 Posts saved to database:', data.postsCount);
+      console.log('✅ Local API call successful!');
+      console.log('📊 Posts saved to files:', data.postsCount);
 
       // Open dashboard to view results with profile URL
       const dashboardUrl = `${DASHBOARD_URL}?profile=${encodeURIComponent(profileInfo.profileUrl)}`;
@@ -79,8 +79,8 @@ async function handleScrapeProfile(profileInfo, posts = null) {
 
       return {
         postsCount: data.postsCount,
-        method: 'supabase-database',
-        profileId: data.profileId,
+        method: 'local-files',
+        files: data.files,
         message: data.message
       };
     } else {

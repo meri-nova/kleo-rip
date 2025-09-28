@@ -353,8 +353,9 @@
       let lastPostCount = 0;
       let noNewPostsCount = 0;
       let ineffectiveClicksCount = 0;
-      const maxNoNewPosts = 8; // Stop after 8 attempts with no new posts (increased from 5)
-      const maxIneffectiveClicks = 12; // Stop after 12 button clicks that don't load new posts (increased from 7)
+      let lastPageHeight = 0;
+      const maxNoNewPosts = 5; // Stop after 5 attempts with no new posts
+      const maxIneffectiveClicks = 3; // Stop after 3 consecutive ineffective clicks (optimized for speed)
       
       debug.log('🎯 Starting infinite scroll and button clicking to load entire post history...');
       
@@ -429,6 +430,9 @@
           // Don't reset noNewPostsCount here - we'll check if the click was effective first
         }
         
+        // Get current page height for better detection
+        const currentPageHeight = document.documentElement.scrollHeight;
+        
         // Check if we got new posts after button click or scroll
         if (currentPostCount === lastPostCount && !buttonClicked) {
           // No button found and no new posts
@@ -448,10 +452,10 @@
             resolve();
             return;
           }
-        } else if (currentPostCount === lastPostCount && buttonClicked) {
-          // Button was clicked but no new posts appeared - ineffective click
+        } else if (currentPostCount === lastPostCount && buttonClicked && currentPageHeight === lastPageHeight) {
+          // Button was clicked but no new posts AND no page height change - truly ineffective click
           ineffectiveClicksCount++;
-          debug.log(`⚠️ Button clicked but no new posts loaded (ineffective click ${ineffectiveClicksCount}/${maxIneffectiveClicks})`);
+          debug.log(`⚠️ Button clicked but no new posts or page height change (ineffective click ${ineffectiveClicksCount}/${maxIneffectiveClicks})`);
           
           if (ineffectiveClicksCount >= maxIneffectiveClicks) {
             debug.log('🏁 Reached end of posts - button clicks no longer load new content. Stopping.');
@@ -474,6 +478,7 @@
         }
         
         lastPostCount = currentPostCount;
+        lastPageHeight = currentPageHeight;
         scrollCount++;
         
         // Wait longer for content to load after clicking buttons
@@ -665,6 +670,22 @@
     } catch (error) {
       debug.error('Failed to save current posts', error);
       const mainButton = document.getElementById('linkedin-scraper-btn');
+      
+      // Try fallback download when extension fails
+      if (error.message && error.message.includes('Chrome extension runtime not available')) {
+        debug.log('🔄 Extension failed, attempting fallback download...');
+        try {
+          const success = saveDataAsDownload(profileInfo, posts);
+          if (success) {
+            mainButton.textContent = '📦 Downloaded!';
+            debug.log('✅ Fallback download successful');
+            return;
+          }
+        } catch (fallbackError) {
+          debug.error('Fallback download also failed:', fallbackError);
+        }
+      }
+      
       mainButton.textContent = '❌ Failed';
     }
   }
@@ -799,6 +820,7 @@
           // Try fallback download if extension completely fails
           if (error.includes('Could not establish connection') || 
               error.includes('Extension context invalidated') ||
+              error.includes('Chrome extension runtime not available') ||
               error.includes('message port closed')) {
             debug.log('🔄 Extension failed, attempting fallback download...');
             try {
