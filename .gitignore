@@ -33,9 +33,6 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 
-# Chrome extension temporary files
-chrome-extension/icons/*.png
-
 # Database setup scripts (keep .sql but not .js)
 setup-database.js
 

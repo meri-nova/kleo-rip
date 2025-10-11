@@ -2,6 +2,41 @@
 (function() {
   'use strict';
 
+  // ==========================================
+  // CONFIGURATION - All settings in one place
+  // ==========================================
+  // Last tested: 2024-10-10
+  // Based on selector testing results
+  const CONFIG = {
+    // Selectors (tested and verified)
+    SELECTORS: {
+      POST_CONTAINER: '.feed-shared-update-v2',
+      POST_CONTENT: '.feed-shared-update-v2__description .break-words',
+      POST_CONTENT_FALLBACK: '.feed-shared-update-v2__description',
+      LIKES: '.social-details-social-counts__reactions-count',
+      COMMENTS: '.social-details-social-counts__comments .social-details-social-counts__count-value',
+      REPOSTS: '[aria-label*="repost"]',
+      REPOST_HEADER: '.update-components-header__text-view',
+      POST_DATE: '.update-components-actor__sub-description',
+      PROFILE_NAME: 'h1.text-heading-xlarge',
+      PROFILE_IMAGE: '.pv-top-card-profile-picture__image',
+      SHOW_MORE_BUTTON: 'button[class*="show-more"]', // Only working selector!
+    },
+    
+    // Timing (milliseconds)
+    SCROLL_WAIT_MS: 5000,
+    BUTTON_WAIT_MS: 12000,
+    EXTRACTION_WAIT_MS: 4000,
+    
+    // Thresholds
+    MAX_NO_NEW_POSTS: 5,
+    MAX_INEFFECTIVE_CLICKS: 3,
+    MIN_CONTENT_LENGTH: 1,
+    
+    // Debug
+    DEBUG_ENABLED: true,
+  };
+
   // Simplified Debug System for Production
   const debug = {
     enabled: true,
@@ -20,6 +55,20 @@
     }
   };
 
+  // ==========================================
+  // UTILITY FUNCTIONS - Reusable helpers
+  // ==========================================
+  
+  // Safely get text content from element
+  function getText(element, defaultValue = '') {
+    return element?.textContent?.trim() || defaultValue;
+  }
+  
+  // Get engagement count from selector
+  function getEngagementCount(postElement, selector) {
+    return parseNumber(getText(postElement.querySelector(selector), '0'));
+  }
+
   // Check if we're on LinkedIn
   function isLinkedInProfile() {
     return window.location.href.includes('/in/') && 
@@ -29,8 +78,8 @@
   // Get basic profile info
   function getProfileInfo() {
     const profileUrl = window.location.href.match(/https:\/\/[^\/]+\/in\/[^\/\?]+/)?.[0] || window.location.href;
-    const fullName = document.querySelector('h1.text-heading-xlarge')?.textContent?.trim() || '';
-    const profileImageUrl = document.querySelector('.pv-top-card-profile-picture__image')?.src || '';
+    const fullName = getText(document.querySelector(CONFIG.SELECTORS.PROFILE_NAME));
+    const profileImageUrl = document.querySelector(CONFIG.SELECTORS.PROFILE_IMAGE)?.src || '';
     const username = profileUrl.split('/in/')[1]?.split('/')[0] || '';
 
     return { profileUrl, fullName, profileImageUrl, username };
@@ -139,54 +188,20 @@
       return null; // Return null to indicate this post should be skipped
     }
     
-    // Get post content with working selectors only
-    const contentSelectors = [
-      '.feed-shared-update-v2__description .break-words',  // Primary
-      '.feed-shared-update-v2__description',               // Fallback
-    ];
+    // Get post content - simplified (tested selectors work!)
+    const content = getText(postElement.querySelector(CONFIG.SELECTORS.POST_CONTENT))
+      || getText(postElement.querySelector(CONFIG.SELECTORS.POST_CONTENT_FALLBACK));
     
-    let content = '';
-    let usedSelector = '';
+    debug.log(`Content: ${content.length} characters`);
+
+    // Get engagement metrics - simplified
+    const likes = getEngagementCount(postElement, CONFIG.SELECTORS.LIKES);
+    const comments = getEngagementCount(postElement, CONFIG.SELECTORS.COMMENTS);
     
-    for (const selector of contentSelectors) {
-      const element = postElement.querySelector(selector);
-      if (element && element.textContent?.trim()) {
-        content = element.textContent.trim();
-        usedSelector = selector;
-        break;
-      }
-    }
+    const repostElement = postElement.querySelector(CONFIG.SELECTORS.REPOSTS);
+    const reposts = parseNumber(repostElement?.getAttribute('aria-label')?.match(/(\d+)\s*repost/i)?.[1] || '0');
     
-    debug.log(`Content length: ${content.length} characters (using selector: "${usedSelector}")`);
-    if (!content) {
-      debug.log('⚠️ Could not find content with any selector. Trying all text in post...');
-      // Fallback: get any text content from the post
-      const allText = postElement.textContent?.trim() || '';
-      // Try to extract meaningful text (skip very short fragments)
-      const textLines = allText.split('\n').filter(line => line.trim().length > 10);
-      if (textLines.length > 0) {
-        content = textLines.join(' ').substring(0, 500); // Limit to 500 chars
-        debug.log(`Fallback content found: ${content.length} characters`);
-      }
-    }
-
-    // Get engagement metrics (these are working perfectly)
-    const likesElement = postElement.querySelector('.social-details-social-counts__reactions-count');
-    const likesText = likesElement?.textContent || '0';
-    const likes = parseNumber(likesText);
-    debug.log(`Likes: "${likesText}" → ${likes}`);
-
-    const commentsElement = postElement.querySelector('.social-details-social-counts__comments .social-details-social-counts__count-value');
-    const commentsText = commentsElement?.textContent || '0';
-    const comments = parseNumber(commentsText);
-    debug.log(`Comments: "${commentsText}" → ${comments}`);
-
-    // Get reposts from aria-label
-    const repostElement = postElement.querySelector('[aria-label*="repost"]');
-    const repostText = repostElement?.getAttribute('aria-label') || '';
-    const repostMatch = repostText.match(/(\d+)\s*repost/i);
-    const reposts = repostMatch ? parseInt(repostMatch[1]) : 0;
-    debug.log(`Reposts: "${repostText}" → ${reposts}`);
+    debug.log(`Engagement: ${likes}L / ${comments}C / ${reposts}R`);
 
     // Extract real LinkedIn post URL from data-urn
     let linkedinPostUrl = '';
@@ -215,40 +230,18 @@
       linkedinPostUrl = `https://www.linkedin.com/feed/update/post-${Date.now()}-${index}`;
     }
 
-    // Extract real post publication date
+    // Extract post date - simplified
     let postDate = new Date().toISOString(); // fallback to today
+    const dateElement = postElement.querySelector(CONFIG.SELECTORS.POST_DATE);
     
-    // Use only the working selector found through testing
-    const dateSelectors = [
-      '.update-components-actor__sub-description'
-    ];
-    
-    for (const selector of dateSelectors) {
-      const dateElement = postElement.querySelector(selector);
-      if (dateElement) {
-        // Try to get datetime attribute first
-        const datetime = dateElement.getAttribute('datetime');
-        if (datetime) {
-          postDate = new Date(datetime).toISOString();
-          debug.log(`Found post date from datetime attribute: ${postDate}`);
-          break;
-        }
-        
-        // Try to parse text content
-        const dateText = dateElement.textContent?.trim();
-        if (dateText) {
-          const parsedDate = parseLinkedInDate(dateText);
-          if (parsedDate) {
-            postDate = parsedDate.toISOString();
-            debug.log(`Found post date from text "${dateText}": ${postDate}`);
-            break;
-          }
-        }
+    if (dateElement) {
+      const datetime = dateElement.getAttribute('datetime');
+      if (datetime) {
+        postDate = new Date(datetime).toISOString();
+      } else {
+        const parsedDate = parseLinkedInDate(getText(dateElement));
+        if (parsedDate) postDate = parsedDate.toISOString();
       }
-    }
-    
-    if (postDate === new Date().toISOString()) {
-      debug.log(`⚠️ Could not find real post date, using today as fallback`);
     }
 
     const postData = {
@@ -269,7 +262,7 @@
     debug.log('🎯 Starting post extraction...');
     
     // Find all posts using the working selector
-    const postElements = document.querySelectorAll('.feed-shared-update-v2');
+    const postElements = document.querySelectorAll(CONFIG.SELECTORS.POST_CONTAINER);
     debug.log(`Found ${postElements.length} post elements in DOM`);
 
     const posts = [];
@@ -304,7 +297,7 @@
       debug.log(`📝 Post ${index + 1}: ${contentLength} chars, ${postData.likes}L/${postData.comments}C/${postData.reposts}R - "${contentPreview}"`);
       
       // Relaxed filtering: Include posts with ANY content OR ANY engagement
-      if (contentLength > 1 || hasEngagement) {
+      if (contentLength > CONFIG.MIN_CONTENT_LENGTH || hasEngagement) {
         // Add placeholder content for posts without text (images/videos)
         if (!postData.content || contentLength < 5) {
           postData.content = `[Image/Video Post - ${postData.likes} likes, ${postData.comments} comments, ${postData.reposts} reposts]`;
@@ -346,18 +339,15 @@
     return posts;
   }
 
-  // Auto-scroll and click "Show more" buttons to load ALL posts
+  // Auto-scroll to load ALL posts (optimized approach)
   function autoScroll() {
     return new Promise((resolve) => {
       let scrollCount = 0;
-      let lastPostCount = 0;
-      let noNewPostsCount = 0;
-      let ineffectiveClicksCount = 0;
       let lastPageHeight = 0;
-      const maxNoNewPosts = 5; // Stop after 5 attempts with no new posts
-      const maxIneffectiveClicks = 3; // Stop after 3 consecutive ineffective clicks (optimized for speed)
+      let noHeightChangeCount = 0;
+      const maxNoHeightChange = 3; // Stop after 3 attempts with no height change
       
-      debug.log('🎯 Starting infinite scroll and button clicking to load entire post history...');
+      debug.log('🎯 Starting optimized auto-scroll to load entire post history...');
       
       function scroll() {
         // Check if user clicked stop
@@ -367,123 +357,50 @@
           return;
         }
         
-        const currentPosts = document.querySelectorAll('.feed-shared-update-v2');
-        const currentPostCount = currentPosts.length;
-        
-        debug.log(`Attempt ${scrollCount}: Found ${currentPostCount} posts total`);
-        
-        // Update button with current post count during scrolling
-        const button = document.getElementById('linkedin-scraper-btn');
-        if (button) {
-          button.textContent = `📊 Loading... (${currentPostCount} posts)`;
-        }
-        
-        // First, scroll to bottom to trigger any lazy loading
-        window.scrollTo(0, document.body.scrollHeight);
-        
-        // Look for "Show more" buttons and click them
-        const showMoreSelectors = [
-          'button[aria-label*="Show more"]',
-          'button[aria-label*="show more"]',
-          'button:contains("Show more")',
-          'button:contains("Show more results")',
-          '.scaffold-finite-scroll__load-button button',
-          '.artdeco-button--secondary:contains("Show more")',
-          '[data-test-id="pagination-show-more"] button',
-          'button[class*="show-more"]',
-          'button[class*="load-more"]'
-        ];
-        
-        let buttonClicked = false;
-        let postCountBeforeClick = currentPostCount;
-        
-        for (const selector of showMoreSelectors) {
-          // Handle :contains() selector manually since it's not native
-          if (selector.includes(':contains(')) {
-            const text = selector.match(/:contains\("([^"]+)"\)/)?.[1];
-            if (text) {
-              const buttons = document.querySelectorAll('button');
-              for (const button of buttons) {
-                if (button.textContent?.toLowerCase().includes(text.toLowerCase()) && button.offsetParent !== null) {
-                  debug.log(`🔵 Found and clicking button: "${button.textContent.trim()}"`);
-                  button.click();
-                  buttonClicked = true;
-                  break;
-                }
-              }
-            }
-          } else {
-            const button = document.querySelector(selector);
-            if (button && button.offsetParent !== null) {
-              debug.log(`🔵 Found and clicking button with selector: "${selector}"`);
-              button.click();
-              buttonClicked = true;
-              break;
-            }
-          }
-          
-          if (buttonClicked) break;
-        }
-        
-        if (buttonClicked) {
-          debug.log('🔵 Clicked "Show more" button, waiting for content to load...');
-          // Don't reset noNewPostsCount here - we'll check if the click was effective first
-        }
-        
-        // Get current page height for better detection
+        // Get current page height
         const currentPageHeight = document.documentElement.scrollHeight;
         
-        // Check if we got new posts after button click or scroll
-        if (currentPostCount === lastPostCount && !buttonClicked) {
-          // No button found and no new posts
-          noNewPostsCount++;
-          debug.log(`⚠️ No new posts loaded and no button found (${noNewPostsCount}/${maxNoNewPosts})`);
-          
-          if (noNewPostsCount >= maxNoNewPosts) {
-            debug.log('🏁 Reached end of posts - no more "Show more" buttons or content. Stopping.');
-            
-            // Show continue loading button
-            const continueButton = document.getElementById('linkedin-scraper-continue-btn');
-            if (continueButton) {
-              continueButton.style.display = 'block';
-              debug.log('📢 Showing "Continue Loading" button for manual retry');
-            }
-            
-            resolve();
-            return;
-          }
-        } else if (currentPostCount === lastPostCount && buttonClicked && currentPageHeight === lastPageHeight) {
-          // Button was clicked but no new posts AND no page height change - truly ineffective click
-          ineffectiveClicksCount++;
-          debug.log(`⚠️ Button clicked but no new posts or page height change (ineffective click ${ineffectiveClicksCount}/${maxIneffectiveClicks})`);
-          
-          if (ineffectiveClicksCount >= maxIneffectiveClicks) {
-            debug.log('🏁 Reached end of posts - button clicks no longer load new content. Stopping.');
-            
-            // Show continue loading button
-            const continueButton = document.getElementById('linkedin-scraper-continue-btn');
-            if (continueButton) {
-              continueButton.style.display = 'block';
-              debug.log('📢 Showing "Continue Loading" button for manual retry');
-            }
-            
-            resolve();
-            return;
-          }
-        } else if (currentPostCount > lastPostCount) {
-          // Got new posts - reset both counters
-          noNewPostsCount = 0;
-          ineffectiveClicksCount = 0;
-          debug.log(`✅ Loaded ${currentPostCount - lastPostCount} new posts`);
+        debug.log(`Scroll ${scrollCount}: Page height ${currentPageHeight}px`);
+        
+        // Update button with scroll progress
+        const button = document.getElementById('linkedin-scraper-btn');
+        if (button) {
+          button.textContent = `📊 Scrolling... (attempt ${scrollCount + 1})`;
         }
         
-        lastPostCount = currentPostCount;
+        // Scroll to bottom to trigger lazy loading
+        window.scrollTo(0, currentPageHeight);
+        
+        // Check if page height changed (new content loaded)
+        if (currentPageHeight === lastPageHeight) {
+          noHeightChangeCount++;
+          debug.log(`⚠️ No height change (${noHeightChangeCount}/${maxNoHeightChange})`);
+          
+          if (noHeightChangeCount >= maxNoHeightChange) {
+            debug.log('🏁 Reached end of posts - no more content loading. Stopping.');
+            
+            // Show continue loading button
+            const continueButton = document.getElementById('linkedin-scraper-continue-btn');
+            if (continueButton) {
+              continueButton.style.display = 'block';
+              debug.log('📢 Showing "Continue Loading" button for manual retry');
+            }
+            
+            resolve();
+            return;
+          }
+        } else {
+          // Page height changed - new content loaded!
+          noHeightChangeCount = 0;
+          const heightIncrease = currentPageHeight - lastPageHeight;
+          debug.log(`✅ Page height increased by ${heightIncrease}px - new content loaded!`);
+        }
+        
         lastPageHeight = currentPageHeight;
         scrollCount++;
         
-        // Wait longer for content to load after clicking buttons
-        const waitTime = buttonClicked ? 12000 : 5000; // Increased wait times for better loading
-        setTimeout(scroll, waitTime);
+        // Wait for content to load, then scroll again
+        setTimeout(scroll, CONFIG.SCROLL_WAIT_MS);
       }
 
       scroll();
@@ -898,7 +815,7 @@
 
       // Wait for final content to load
       button.textContent = '⏳ Extracting...';
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, CONFIG.EXTRACTION_WAIT_MS));
 
       // Extract posts
       const posts = extractPosts();
