@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LinkedIn Post Scraper",
   "version": "1.0.0",
-  "description": "Scrape and analyze LinkedIn posts with engagement metrics",
+  "description": "Scrape LinkedIn posts with engagement metrics",
   
   "permissions": [
     "activeTab",

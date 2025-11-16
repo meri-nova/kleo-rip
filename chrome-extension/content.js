@@ -339,6 +339,51 @@
     return posts;
   }
 
+  // Click "Show more results" button if present (new LinkedIn layout)
+  async function clickShowMoreResults() {
+    return new Promise((resolve) => {
+      debug.log('🔍 Checking for "Show more results" button...');
+
+      // Try multiple selectors for the "Show more results" button
+      const selectors = [
+        'button:has-text("Show more results")',
+        'button[aria-label*="Show more"]',
+        'button:contains("Show more results")',
+        '.scaffold-finite-scroll__load-button',
+        'button.scaffold-finite-scroll__load-button'
+      ];
+
+      let showMoreButton = null;
+
+      // Try to find the button using different methods
+      const buttons = document.querySelectorAll('button');
+      for (const button of buttons) {
+        const buttonText = button.textContent.trim().toLowerCase();
+        if (buttonText.includes('show more results') ||
+            buttonText.includes('show more') ||
+            buttonText === 'show more results') {
+          showMoreButton = button;
+          debug.log('✅ Found "Show more results" button:', button);
+          break;
+        }
+      }
+
+      if (showMoreButton && showMoreButton.offsetParent !== null) {
+        debug.log('🖱️ Clicking "Show more results" button...');
+        showMoreButton.click();
+
+        // Wait for content to load after clicking
+        setTimeout(() => {
+          debug.log('✅ Waited for content to load after clicking "Show more results"');
+          resolve();
+        }, 3000); // Wait 3 seconds for new content
+      } else {
+        debug.log('ℹ️ No "Show more results" button found (or already clicked)');
+        resolve();
+      }
+    });
+  }
+
   // Auto-scroll to load ALL posts (optimized approach)
   function autoScroll() {
     return new Promise((resolve) => {
@@ -346,9 +391,9 @@
       let lastPageHeight = 0;
       let noHeightChangeCount = 0;
       const maxNoHeightChange = 3; // Stop after 3 attempts with no height change
-      
+
       debug.log('🎯 Starting optimized auto-scroll to load entire post history...');
-      
+
       function scroll() {
         // Check if user clicked stop
         if (shouldStopScraping) {
@@ -370,7 +415,19 @@
         
         // Scroll to bottom to trigger lazy loading
         window.scrollTo(0, currentPageHeight);
-        
+
+        // Check for and click "Show more results" button
+        const buttons = document.querySelectorAll('button');
+        for (const button of buttons) {
+          const buttonText = button.textContent.trim().toLowerCase();
+          if ((buttonText.includes('show more results') || buttonText === 'show more results') &&
+              button.offsetParent !== null) {
+            debug.log('🖱️ Found and clicking "Show more results" button during scroll');
+            button.click();
+            break;
+          }
+        }
+
         // Check if page height changed (new content loaded)
         if (currentPageHeight === lastPageHeight) {
           noHeightChangeCount++;
@@ -649,7 +706,10 @@
       // Show main button as loading again
       mainButton.textContent = '⏳ Continuing...';
       mainButton.disabled = true;
-      
+
+      // Check for "Show more results" button again
+      await clickShowMoreResults();
+
       // Continue auto-scroll
       await autoScroll();
       
@@ -809,6 +869,10 @@
       
       isScrapingActive = true;
       shouldStopScraping = false;
+
+      // First, check for and click "Show more results" button if present
+      button.textContent = '⏳ Loading more...';
+      await clickShowMoreResults();
 
       // Auto-scroll to load ALL posts
       await autoScroll();
